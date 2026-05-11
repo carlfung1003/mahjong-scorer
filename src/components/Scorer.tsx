@@ -42,12 +42,14 @@ export function Scorer() {
     setBusy(true);
     setError(null);
     try {
-      const dataUrl = await fileToBase64(file);
-      const mediaType = file.type === "image/png" ? "image/png" : file.type === "image/webp" ? "image/webp" : "image/jpeg";
+      // Anthropic only accepts jpeg/png/webp/gif and has size limits. Re-encode
+      // every upload to JPEG via canvas to handle HEIC (iPhone default), strip
+      // EXIF, downscale, and guarantee the media-type matches the bytes.
+      const imageBase64 = await preprocessImage(file);
       const res = await fetch("/api/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: dataUrl, mediaType }),
+        body: JSON.stringify({ imageBase64, mediaType: "image/jpeg" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "detection failed");
@@ -378,16 +380,47 @@ export function Scorer() {
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
+async function preprocessImage(file: File): Promise<string> {
+  // HEIC/HEIF can't be decoded by Chrome canvas — Safari/iOS can. Detect & message early.
+  const isHeic = /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(objectUrl);
+    if (img.naturalWidth === 0) {
+      if (isHeic) {
+        throw new Error("HEIC photos aren't supported here. On iPhone: Settings → Camera → Formats → Most Compatible, or share/export as JPEG.");
+      }
+      throw new Error("Could not read the image. Try a JPEG or PNG.");
+    }
+
+    const MAX = 2048;
+    let { naturalWidth: w, naturalHeight: h } = img;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not available.");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const base64 = dataUrl.split(",")[1] ?? "";
+    if (!base64) throw new Error("Failed to encode image.");
+    return base64;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // strip data URL prefix
-      const base64 = result.split(",")[1] ?? result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Image decode failed"));
+    img.src = src;
   });
 }
