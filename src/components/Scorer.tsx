@@ -386,12 +386,19 @@ async function preprocessImage(file: File): Promise<string> {
 
   const objectUrl = URL.createObjectURL(file);
   try {
-    const img = await loadImage(objectUrl);
-    if (img.naturalWidth === 0) {
+    let img: HTMLImageElement;
+    try {
+      img = await loadImage(objectUrl);
+    } catch {
+      const ext = (file.name.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase();
+      const type = file.type || "unknown";
       if (isHeic) {
-        throw new Error("HEIC photos aren't supported here. On iPhone: Settings → Camera → Formats → Most Compatible, or share/export as JPEG.");
+        throw new Error(`This browser can't decode HEIC. Switch to Safari, or on iPhone: Settings → Camera → Formats → Most Compatible. (file: ${ext}, type: ${type})`);
       }
-      throw new Error("Could not read the image. Try a JPEG or PNG.");
+      throw new Error(`Couldn't read this file as an image (file: ${ext || "no ext"}, type: ${type}). Try a JPEG or PNG.`);
+    }
+    if (img.naturalWidth === 0) {
+      throw new Error(`Image loaded as 0×0 — file may be corrupt (type: ${file.type || "unknown"}).`);
     }
 
     const MAX = 2048;
