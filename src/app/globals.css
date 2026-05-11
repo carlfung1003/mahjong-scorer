@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b1a14;     /* mahjong-table green/black */
+  --foreground: #f5f1e6;     /* ivory */
+  --accent: #c8a96a;          /* brass */
+  --danger: #c0392b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-tc: var(--font-noto-tc);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), var(--font-noto-tc), system-ui, sans-serif;
 }
+
+/* tile chip */
+.tile-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  height: 3.5rem;
+  padding: 0 0.5rem;
+  border-radius: 0.5rem;
+  background: #f5f1e6;
+  color: #0b1a14;
+  font-family: var(--font-noto-tc), serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1;
+  box-shadow: 0 2px 0 #c8a96a, 0 4px 8px rgba(0,0,0,0.3);
+  user-select: none;
+}
+.tile-chip.honor { color: #c0392b; }
+.tile-chip.flower { background: #fff3d1; color: #2d6a4f; font-size: 1.25rem; }
+.tile-chip.small { min-width: 2rem; height: 2.5rem; font-size: 1.1rem; }
+.tile-chip button { all: unset; cursor: pointer; }

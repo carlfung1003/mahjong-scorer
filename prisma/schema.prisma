@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Score {
+  id           String   @id @default(cuid())
+  // Tiles encoded as comma-separated MPSZ notation (e.g. "1m,2m,3m,...")
+  concealed    String
+  exposedMelds String   // JSON: Array<{kind, tiles, concealed}>
+  flowers      String   // comma-separated
+  winningTile  String
+  selfDraw     Boolean
+  concealedHand Boolean // 門前清
+  seatWind     String   // 1z..4z
+  roundWind    String   // 1z..4z
+  // result snapshot at scoring time
+  faan         Int
+  rawFaan      Int
+  reasons      String   // JSON: FaanReason[]
+  isLimit      Boolean
+  createdAt    DateTime @default(now())
+}
