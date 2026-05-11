@@ -83,8 +83,39 @@ export async function detectTilesFromImage(args: {
     .map((b) => b.text)
     .join("");
 
-  // strip possible code fences just in case
-  const cleaned = text.trim().replace(/^```(?:json)?\n?/, "").replace(/```$/, "").trim();
-  const parsed = JSON.parse(cleaned);
+  // Sonnet sometimes adds prose ("I'll analyze...") or markdown fences around
+  // the JSON. Extract the first balanced { ... } block instead of parsing the
+  // whole response.
+  const json = extractJsonObject(text);
+  if (!json) throw new Error(`Model did not return JSON. Raw: ${text.slice(0, 200)}`);
+  const parsed = JSON.parse(json);
   return DetectionSchema.parse(parsed);
+}
+
+function extractJsonObject(text: string): string | null {
+  // try fenced ```json ... ``` first
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) return fence[1].trim();
+  // otherwise find first balanced { ... }
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }
