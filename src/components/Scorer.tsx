@@ -381,10 +381,15 @@ export function Scorer() {
 }
 
 async function preprocessImage(file: File): Promise<string> {
-  // HEIC/HEIF can't be decoded by Chrome canvas — Safari/iOS can. Detect & message early.
+  // HEIC/HEIF can't be decoded by Chrome canvas — convert to JPEG blob first.
   const isHeic = /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+  let workingBlob: Blob = file;
+  if (isHeic) {
+    const { heicTo } = await import("heic-to");
+    workingBlob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.9 });
+  }
 
-  const objectUrl = URL.createObjectURL(file);
+  const objectUrl = URL.createObjectURL(workingBlob);
   try {
     let img: HTMLImageElement;
     try {
@@ -392,9 +397,6 @@ async function preprocessImage(file: File): Promise<string> {
     } catch {
       const ext = (file.name.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase();
       const type = file.type || "unknown";
-      if (isHeic) {
-        throw new Error(`This browser can't decode HEIC. Switch to Safari, or on iPhone: Settings → Camera → Formats → Most Compatible. (file: ${ext}, type: ${type})`);
-      }
       throw new Error(`Couldn't read this file as an image (file: ${ext || "no ext"}, type: ${type}). Try a JPEG or PNG.`);
     }
     if (img.naturalWidth === 0) {
