@@ -38,14 +38,16 @@ export function Scorer() {
   const [result, setResult] = useState<ScoreResult | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [detectionNotes, setDetectionNotes] = useState<string | null>(null);
+
   async function handlePhoto(file: File) {
     setBusy(true);
     setError(null);
+    setDetectionNotes(null);
     try {
-      // Anthropic only accepts jpeg/png/webp/gif and has size limits. Re-encode
-      // every upload to JPEG via canvas to handle HEIC (iPhone default), strip
-      // EXIF, downscale, and guarantee the media-type matches the bytes.
       const imageBase64 = await preprocessImage(file);
+      setPhotoDataUrl(`data:image/jpeg;base64,${imageBase64}`);
       const res = await fetch("/api/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,6 +58,7 @@ export function Scorer() {
       setConcealed(sortTiles((data.concealedTiles ?? []) as TileType[]));
       setExposed((data.exposedMelds ?? []) as ExposedMeld[]);
       setFlowers(sortTiles((data.flowers ?? []) as TileType[]));
+      if (data.notes) setDetectionNotes(data.notes as string);
       setPhase("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to detect tiles. You can still enter them manually below.");
@@ -135,12 +138,42 @@ export function Scorer() {
   }
 
   if (phase === "review") {
+    const totalDetected = concealed.length + exposed.reduce((s, m) => s + m.tiles.length, 0);
     return (
       <div className="mx-auto max-w-2xl py-8">
         <h2 className="mb-2 text-2xl font-semibold">Review tiles</h2>
-        <p className="mb-6 text-sm text-zinc-400">
-          Tap any tile to change or remove it. The hand should total 14 tiles (concealed + exposed melds), with 花 listed separately.
+        <p className="mb-4 text-sm text-zinc-400">
+          Compare the photo to what we detected. Tap any tile to change it. The hand should total 14 tiles (concealed + exposed melds); 花 listed separately.
         </p>
+
+        {photoDataUrl && (
+          <div className="mb-5 overflow-hidden rounded-xl border border-zinc-700 bg-black">
+            <img src={photoDataUrl} alt="Your uploaded hand" className="block max-h-72 w-full object-contain" />
+            <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+              <span className="text-zinc-400">
+                Detected: <span className="font-mono text-zinc-200">{totalDetected}</span> hand tiles
+                {flowers.length > 0 && <> · <span className="font-mono text-zinc-200">{flowers.length}</span> 花</>}
+                {totalDetected !== 14 && totalDetected !== 0 && (
+                  <span className="ml-2 text-amber-400">(expected 14)</span>
+                )}
+                {totalDetected === 0 && (
+                  <span className="ml-2 text-red-400">(no hand tiles found — verify or add manually)</span>
+                )}
+              </span>
+              <button
+                className="text-[#c8a96a] hover:underline"
+                onClick={() => setPhase("upload")}
+              >
+                Re-upload
+              </button>
+            </div>
+            {detectionNotes && (
+              <div className="border-t border-zinc-800 px-3 py-2 text-xs text-zinc-400">
+                <span className="text-zinc-500">model note:</span> {detectionNotes}
+              </div>
+            )}
+          </div>
+        )}
 
         <TileRow label="Concealed tiles 手牌" tiles={concealed} onChange={(t) => setConcealed(sortTiles(t))} />
         <TileRow label="Flowers 花牌" tiles={flowers} onChange={(t) => setFlowers(sortTiles(t))} />

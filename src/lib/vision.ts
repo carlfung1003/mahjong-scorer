@@ -21,7 +21,7 @@ export type Detection = z.infer<typeof DetectionSchema>;
 
 const SYSTEM = `You are a Hong Kong mahjong tile recognition assistant.
 
-You will receive a photo of a winning mahjong hand (廣東牌). Identify every tile and return STRICT JSON.
+You will receive a photo. Identify the player's WINNING HAND only — a row/group of ~14 face-up tiles deliberately laid out, plus any 花 tiles set off to the side, and any declared 碰/槓 melds.
 
 Tile encoding (MPSZ):
 - m = 萬 (characters): 1m..9m
@@ -30,23 +30,24 @@ Tile encoding (MPSZ):
 - z = honors: 1z=東 2z=南 3z=西 4z=北 5z=中(red dragon) 6z=發(green dragon) 7z=白(white dragon, often blank or framed)
 - f = flowers: 1f=春 2f=夏 3f=秋 4f=冬 5f=梅 6f=蘭 7f=菊 8f=竹
 
-Distinguish:
-- "concealedTiles": tiles in the player's hand, face up, not part of declared melds. Should be 14 tiles minus 3*number_of_exposed_melds.
-- "exposedMelds": pung/kong (and rarely chow) the player declared during play. Usually shown to the side, slightly rotated or set apart.
-- "flowers": 花 / 季 tiles set off to the side (not part of the 14).
+What to RETURN vs IGNORE:
+- "concealedTiles": tiles in the laid-out hand, face up. Total (concealed + exposed melds) should normally be 14.
+- "exposedMelds": 碰 (pung) / 槓 (kong) / rarely 上 (chow) the player declared during play, usually set apart from the main row, sometimes one tile rotated.
+- "flowers": 花/季 tiles set aside (NOT part of the 14).
+- IGNORE: the tile wall (牌山, tiles stacked vertically in long rows around the table), discards scattered in the middle, other players' hands, tiles still face-down. These are NOT the winning hand.
 
-Output STRICT JSON matching this schema:
+CRITICAL — do not invent tiles:
+- If you cannot SEE a clearly-laid-out winning hand in the photo, return all empty arrays and explain in "notes" what IS in the photo. Do not guess.
+- Never return tiles you cannot identify with reasonable confidence. Empty is better than wrong.
+- If you can only identify some tiles confidently, return only those and say which positions you skipped in "notes".
+
+Output STRICT JSON, no markdown fences, no commentary:
 {
-  "concealedTiles": string[],   // e.g. ["1m","2m","3m","5p","5p"]
-  "exposedMelds": [
-    { "kind": "pung"|"kong"|"chow", "tiles": string[], "concealed": boolean }
-  ],
+  "concealedTiles": string[],
+  "exposedMelds": [{ "kind": "pung"|"kong"|"chow", "tiles": string[], "concealed": boolean }],
   "flowers": string[],
-  "notes": string                // optional: anything unclear or ambiguous
-}
-
-If you cannot identify a tile with confidence, omit it and mention in notes. Do not invent tiles.
-Return ONLY the JSON object — no commentary, no markdown fences.`;
+  "notes": string
+}`;
 
 export async function detectTilesFromImage(args: {
   imageBase64: string;
