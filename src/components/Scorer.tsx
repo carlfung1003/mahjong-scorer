@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { sortTiles, SEAT_TO_HONOR, type Tile as TileType } from "@/lib/mahjong/tiles";
 import type { ScoreResult } from "@/lib/mahjong/faan";
 import { TileRow } from "./TilePicker";
 import { Tile } from "./Tile";
 
-type Phase = "upload" | "review" | "result";
+type Phase = "upload" | "crop" | "review" | "result";
+
+type Crop = { x: number; y: number; w: number; h: number }; // fractions 0..1 of image size
 
 type ExposedMeld = { kind: "chow" | "pung" | "kong"; tiles: TileType[]; concealed: boolean };
 
@@ -39,6 +41,7 @@ export function Scorer() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [croppedDataUrl, setCroppedDataUrl] = useState<string | null>(null);
   const [detectionNotes, setDetectionNotes] = useState<string | null>(null);
 
   async function handlePhoto(file: File) {
@@ -48,6 +51,20 @@ export function Scorer() {
     try {
       const imageBase64 = await preprocessImage(file);
       setPhotoDataUrl(`data:image/jpeg;base64,${imageBase64}`);
+      setCroppedDataUrl(null);
+      setPhase("crop");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read that image.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runDetection(imageBase64: string) {
+    setBusy(true);
+    setError(null);
+    setDetectionNotes(null);
+    try {
       const res = await fetch("/api/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,6 +83,19 @@ export function Scorer() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleCropConfirm(crop: Crop | null) {
+    if (!photoDataUrl) return;
+    const base64 = crop
+      ? await cropImage(photoDataUrl, crop)
+      : photoDataUrl.split(",")[1];
+    if (!base64) {
+      setError("Failed to crop image.");
+      return;
+    }
+    setCroppedDataUrl(`data:image/jpeg;base64,${base64}`);
+    await runDetection(base64);
   }
 
   async function calculate(save: boolean) {
@@ -137,6 +167,26 @@ export function Scorer() {
     );
   }
 
+  if (phase === "crop" && photoDataUrl) {
+    return (
+      <div className="mx-auto max-w-2xl py-8">
+        <h2 className="mb-2 text-2xl font-semibold">Frame the hand</h2>
+        <p className="mb-4 text-sm text-zinc-400">
+          Drag a box around just the row of winning tiles (and any 花 next to them).
+          Tighter framing = much better detection. Skip to use the full image.
+        </p>
+        <CropSelector
+          src={photoDataUrl}
+          onConfirm={handleCropConfirm}
+          onSkip={() => handleCropConfirm(null)}
+          onCancel={() => setPhase("upload")}
+          busy={busy}
+        />
+        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+      </div>
+    );
+  }
+
   if (phase === "review") {
     const totalDetected = concealed.length + exposed.reduce((s, m) => s + m.tiles.length, 0);
     return (
@@ -148,7 +198,8 @@ export function Scorer() {
 
         {photoDataUrl && (
           <div className="mb-5 overflow-hidden rounded-xl border border-zinc-700 bg-black">
-            <img src={photoDataUrl} alt="Your uploaded hand" className="block max-h-72 w-full object-contain" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={croppedDataUrl ?? photoDataUrl} alt="Sent for detection" className="block max-h-72 w-full object-contain" />
             <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
               <span className="text-zinc-400">
                 Detected: <span className="font-mono text-zinc-200">{totalDetected}</span> hand tiles
@@ -465,4 +516,144 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Image decode failed"));
     img.src = src;
   });
+}
+
+async function cropImage(dataUrl: string, crop: Crop): Promise<string> {
+  const img = await loadImage(dataUrl);
+  const cw = Math.max(1, Math.round(img.naturalWidth * crop.w));
+  const ch = Math.max(1, Math.round(img.naturalHeight * crop.h));
+  const cx = Math.round(img.naturalWidth * crop.x);
+  const cy = Math.round(img.naturalHeight * crop.y);
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas not available");
+  ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+  return canvas.toDataURL("image/jpeg", 0.9).split(",")[1] ?? "";
+}
+
+function CropSelector({
+  src,
+  onConfirm,
+  onSkip,
+  onCancel,
+  busy,
+}: {
+  src: string;
+  onConfirm: (crop: Crop) => void;
+  onSkip: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ startX: number; startY: number; curX: number; curY: number } | null>(null);
+  const [crop, setCrop] = useState<Crop | null>(null);
+
+  function relativeXY(e: React.PointerEvent): { x: number; y: number } | null {
+    const el = containerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    return { x, y };
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (busy) return;
+    const p = relativeXY(e);
+    if (!p) return;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    setDrag({ startX: p.x, startY: p.y, curX: p.x, curY: p.y });
+    setCrop(null);
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!drag) return;
+    const p = relativeXY(e);
+    if (!p) return;
+    setDrag({ ...drag, curX: p.x, curY: p.y });
+  }
+  function onPointerUp() {
+    if (!drag) return;
+    const x = Math.min(drag.startX, drag.curX);
+    const y = Math.min(drag.startY, drag.curY);
+    const w = Math.abs(drag.curX - drag.startX);
+    const h = Math.abs(drag.curY - drag.startY);
+    setDrag(null);
+    if (w > 0.02 && h > 0.02) {
+      setCrop({ x, y, w, h });
+    }
+  }
+
+  const live = drag
+    ? {
+        x: Math.min(drag.startX, drag.curX),
+        y: Math.min(drag.startY, drag.curY),
+        w: Math.abs(drag.curX - drag.startX),
+        h: Math.abs(drag.curY - drag.startY),
+      }
+    : crop;
+
+  return (
+    <div>
+      <div
+        ref={containerRef}
+        className="relative w-full select-none overflow-hidden rounded-xl bg-black touch-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="upload" className="block w-full" draggable={false} />
+        {live && (
+          <>
+            <div className="pointer-events-none absolute inset-0 bg-black/60" />
+            <div
+              className="pointer-events-none absolute border-2 border-[#c8a96a] shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
+              style={{
+                left: `${live.x * 100}%`,
+                top: `${live.y * 100}%`,
+                width: `${live.w * 100}%`,
+                height: `${live.h * 100}%`,
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.6)",
+              }}
+            />
+          </>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="rounded-full bg-[#c8a96a] px-5 py-2 font-medium text-[#0b1a14] disabled:opacity-50"
+          disabled={busy || !crop}
+          onClick={() => crop && onConfirm(crop)}
+        >
+          {busy ? "Detecting…" : crop ? "Detect tiles in this crop" : "Draw a box first"}
+        </button>
+        <button
+          className="rounded-full border border-zinc-600 px-5 py-2 text-sm text-zinc-300 disabled:opacity-50"
+          disabled={busy}
+          onClick={onSkip}
+        >
+          Use full image
+        </button>
+        {crop && (
+          <button
+            className="rounded-full px-5 py-2 text-sm text-zinc-400"
+            disabled={busy}
+            onClick={() => setCrop(null)}
+          >
+            Reset crop
+          </button>
+        )}
+        <button
+          className="ml-auto rounded-full px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          ← Re-upload
+        </button>
+      </div>
+    </div>
+  );
 }
