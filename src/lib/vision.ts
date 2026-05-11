@@ -28,7 +28,17 @@ Tile encoding (MPSZ):
 - p = 筒/餅 (dots/circles): 1p..9p
 - s = 索/條 (bamboo/sticks): 1s..9s
 - z = honors: 1z=東 2z=南 3z=西 4z=北 5z=中(red dragon) 6z=發(green dragon) 7z=白(white dragon, often blank or framed)
-- f = flowers: 1f=春 2f=夏 3f=秋 4f=冬 5f=梅 6f=蘭 7f=菊 8f=竹
+- f = flowers. DO NOT try to read the tiny Chinese character on a flower tile.
+  Identify by COLOR + NUMBER instead:
+    - RED numeral 1 → 1f (春)
+    - RED numeral 2 → 2f (夏)
+    - RED numeral 3 → 3f (秋)
+    - RED numeral 4 → 4f (冬)
+    - BLUE/GREEN numeral 1 → 5f (梅)
+    - BLUE/GREEN numeral 2 → 6f (蘭)
+    - BLUE/GREEN numeral 3 → 7f (菊)
+    - BLUE/GREEN numeral 4 → 8f (竹)
+  The numeral is the big visible digit on the tile. The Chinese character is decorative — ignore it.
 
 What to RETURN vs IGNORE:
 - "concealedTiles": tiles in the laid-out hand, face up. Total (concealed + exposed melds) should normally be 14.
