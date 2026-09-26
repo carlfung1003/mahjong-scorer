@@ -22,6 +22,17 @@ body {
   font-family: var(--font-geist-sans), var(--font-noto-tc), system-ui, sans-serif;
 }
 
+/* Mobile Safari hardening (KAN-219).
+   manipulation = no double-tap zoom when tapping tiles fast; pinch zoom kept.
+   overscroll none = a downward swipe can't pull-to-refresh away a hand
+   that's mid-correction (this is a tool, not a reading page). */
+html, body, button, input, a, summary, label, [role="button"] {
+  touch-action: manipulation;
+}
+html, body {
+  overscroll-behavior-y: none;
+}
+
 /* tile chip */
 .tile-chip {
   display: inline-flex;

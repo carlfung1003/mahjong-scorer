@@ -136,7 +136,8 @@ export function Scorer() {
 
   if (phase === "upload") {
     return (
-      <div className="flex flex-col items-center gap-6 py-12">
+      // Short phones (iPhone SE): trim padding so the upload screen fits without scrolling.
+      <div className="flex flex-col items-center gap-6 py-12 [@media(max-height:620px)]:py-6">
         <h2 className="text-2xl font-semibold">Snap your winning hand</h2>
         <p className="max-w-md text-center text-zinc-300">
           Take a photo of all 14 tiles (plus any 花/季 set aside).
@@ -250,7 +251,7 @@ export function Scorer() {
                     next[i] = { ...next[i], kind: e.target.value as ExposedMeld["kind"] };
                     setExposed(next);
                   }}
-                  className="rounded bg-[#1c2e26] px-2 py-1"
+                  className="rounded bg-[#1c2e26] px-2 py-1 text-base sm:text-sm"
                 >
                   <option value="chow">chow 上</option>
                   <option value="pung">pung 碰</option>
@@ -348,7 +349,8 @@ export function Scorer() {
 
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
 
-        <div className="flex gap-3">
+        {/* flex-wrap: three buttons don't fit a 320px phone side by side (KAN-219) */}
+        <div className="flex flex-wrap gap-3">
           <button
             className="rounded-full bg-[#c8a96a] px-6 py-2.5 font-medium text-[#0b1a14] disabled:opacity-50"
             disabled={busy}
@@ -408,7 +410,7 @@ export function Scorer() {
             <input
               readOnly
               value={shareUrl}
-              className="flex-1 rounded bg-[#1c2e26] px-3 py-2 text-sm font-mono"
+              className="flex-1 rounded bg-[#1c2e26] px-3 py-2 text-base sm:text-sm font-mono"
               onFocus={(e) => e.currentTarget.select()}
             />
             <button

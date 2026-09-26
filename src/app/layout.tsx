@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 
@@ -9,6 +9,14 @@ const notoTC = Noto_Sans_TC({ variable: "--font-noto-tc", subsets: ["latin"], we
 export const metadata: Metadata = {
   title: "計番 廣東牌 · Mahjong Scorer",
   description: "Snap a photo of your winning Hong Kong mahjong hand and get the 番 breakdown instantly.",
+};
+
+// Mobile Safari (KAN-219): viewport-fit=cover exposes env(safe-area-inset-*).
+// Pinch zoom stays on — double-tap zoom is handled with touch-action in globals.css.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
